@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
 import sys
-import glob
 from shutil import rmtree
-from collections import deque
 
 
 def arg_handler(args):

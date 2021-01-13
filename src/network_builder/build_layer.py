@@ -69,9 +69,7 @@ def layer_numbering(args):
     # binning, assembly, tetranucleo + read coverage, read pairing, linked reads
 
     arg_boo = [args.is_binned, args.is_assembly, args.is_compo, args.is_pair, args.is_lr]
-    layer_names = ['binned', "assembly", "compo", "pair", "lr"]
-    print(layer_names)
-    print(arg_boo)
+
     layer_func = [make_bin_net, make_assembly_net, make_compo_net, make_pair_net, make_barcode_net]
     layer_num_lookup = []
     layer_ids = deque(range(1, sum(arg_boo) + 1))
@@ -101,10 +99,9 @@ def write_im_vertices(ctg_lookup, net_outfile):
 
 
 def write_im_layers(args, ctg_lookup, layer_num_lookup, net_outfile):
-    outstr = "*Multilayer\n"
+    outstr = "*Intra\n"
     # layer_num_lookup = [(v, k) for k, v in layer_num_lookup.items()]
     # layer_num_lookup.sort()
-    print(len(layer_num_lookup))
     for layer_id, func in layer_num_lookup:
         outstr += func(args, ctg_lookup, layer_id)
 
