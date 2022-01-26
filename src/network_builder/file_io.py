@@ -1,5 +1,4 @@
 import gzip
-from collections import deque
 
 
 def plain_reader(file_name):

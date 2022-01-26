@@ -5,6 +5,7 @@ from shutil import rmtree
 
 
 def arg_handler(args):
+    # attributes: fasta file, is_binned, is_assembly, is_pair, min_ctg_len
     #     layer_names = ['binned', "assembly", "compo", "pair", "lr"]
     # 1. contig min
     # 2. output path
@@ -16,7 +17,7 @@ def arg_handler(args):
     ah_output(args)
     ah_aln(args)
     ah_read(args)
-    args.is_binned, args.is_assembly, args.is_compo = [False] * 3
+    args.is_binned, args.is_compo = [False] * 2
 
     ah_bin_dir(args)
     ah_lr_reads(args)
@@ -33,10 +34,19 @@ def arg_handler(args):
 
     return args
 
+def ah_contigs(args):
+    if not args.ctg_fa and not args.bin_dir:
+        sys.exit("[::Error::] contig files not provided. Exiting...")
+#     this function is not used yet
+#     because in the arg parser, a contig file is always required
+
+
+
+
 
 def ah_min_ctg_len(args):
-    if args.min_ctg_len < 1500:
-        args.min_ctg_len = 1500
+    if args.min_ctg_len < 1000:
+        args.min_ctg_len = 1000
         print("[::Warning::] minimum contig size must be >= 1500. set it to 1500.")
 
 
@@ -72,54 +82,63 @@ def ah_aln(args):
             args.aln_r1 = aln_file[0]
             args.aln_r2 = aln_file[1]
             del args.aln_file
-            print("[::Checking alignment files::] R1:{0}, \n\tR2:{1}".format(args.aln_r1, args.aln_r2))
+            print("[::Message::] Checking alignment files:\nR1:{0}, \n\tR2:{1}".format(args.aln_r1, args.aln_r2))
         elif len(aln_file) == 1:
             args.aln_file = aln_file[0]
-            print("[::Checking alignment files::] {}".format(args.aln_file))
+            print("[::Message::] Checking alignment files:\n {}".format(args.aln_file))
 
 
-def ah_read(args):
+def ah_read(args) -> None:
     # if paired end in 2 files: args.paired_end_reads does not exist. there is args.reads_r1, args.reads_r2
     # if paired end in 1 file: args.paired_end_reads exist. stub: This is not implemented in the arg parser yet.
     # if single end: there is args.single_read_file
-    args.reads_exist = False
+    # args.reads_exist = False
     if args.pe_reads:
+        print("[::Message::] Found paired-end reads {}".format(args.pe_reads))
         reads = args.pe_reads
         args.se_reads = False
         if len(reads) == 1:
-            args.reads_exist = True
-            # pass
+            print("[::Message::] Reads as interleaved {}".format(args.pe_reads))
+
+            #  stubL read paired end reads in interleaved format
+            # args.reads_exist = True
             # stub
             # read paired end reads in interleaved format
         elif len(reads) == 2:
-            args.reads_exist = True
-            # pass
+            print("[::Message::] Reads as uninterleaved duo {}".format(args.pe_reads))
+            # args.reads_exist = True
+
             # stub
             # read paired end R1 and R2 in separate files
         else:
-            print("[::Error::] invalid paired end reads:{}".format(reads))
-            del args.pe_reads
+            print("[::Warning::] discard invalid paired end reads:{}".format(args.pe_reads))
+            args.pe_reads = False
 
     elif args.se_reads:
-        args.reads_exist = True
+        # args.reads_exist = True
         args.pe_reads = False
 
 
 def ah_bin_dir(args):
     if args.bin_dir:
+        print("[::Message::] Found binning result: {}".format(args.bin_dir))
+        print("[::Message::] \"Binned\" mode on")
         args.is_binned = True
-    formatted_bin_dir = []
-    for i_bin_dir in args.bin_dir:
-        if not i_bin_dir.endswith("/"):
-            i_bin_dir += "/"
-        formatted_bin_dir.append(i_bin_dir)
-    args.bin_dir = formatted_bin_dir
+        formatted_bin_dir = []
+        for i_bin_dir in args.bin_dir:
+            if not i_bin_dir.endswith("/"):
+                i_bin_dir += "/"
+            formatted_bin_dir.append(i_bin_dir)
+
+        args.bin_dir = formatted_bin_dir
 
 
 def ah_lr_reads(args):
     # this can only be executed after ah_reads(args)
     if args.is_lr:
-        if not args.reads_exist:
+        print("[::Message::] Found read cloud file(s): {}".format(args.bin_dir))
+        print("[::Message::] \"Read cloud\" mode on")
+        if not args.pe_reads and not args.se_reads:
             args.is_lr = False
             print("[::Warning::] Read file not provided. Disabling read cloud")
         if not args.aln_file and not args.aln_r1:
@@ -127,15 +146,28 @@ def ah_lr_reads(args):
         # stub
 
 
-def ah_pairing(args):
+def ah_pairing(args) -> None:
     if args.is_pair:
+        print("[::Message::] Found paired-end read file(s): {}".format(args.pe_reads))
+        print("[::Message::] \"Pairing\" mode on")
         if not args.pe_reads and not args.aln_file and not args.aln_r1:
             args.is_pair = False
-            print("[Warning] Neither the read file(s) or read to contig alignments provided. Disabling read pairing")
+            print("[::Warning::] Neither the read file(s) or read to contig alignments provided. Disabling read pairing")
         if args.pe_reads and not args.aln_file and not args.aln_r1:
-            print("[Calling BWA]")
+            args.is_pair = False
+            print("[::Calling BWA::] ...is actually not implemented yet. Disabling pairing...")
             # stub
 
+
+def ah_assembly(args) -> None:
+    if args.is_assembly:
+        if args.assember == "spades":
+            if args.ctg_paths:
+                print("[::Message::] \"Assembly\" mode on.")
+                print("[::Message::] Assembler: Spades. contig paths file: {}".format(args.ctg_paths))
+            else:
+                args.is_assembly = False
+                print("[::Message::] Cannot find contig paths file. Disabling assembly mode...")
 
 def bwa_caller():
     # stub
