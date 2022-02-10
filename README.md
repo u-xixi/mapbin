@@ -27,7 +27,7 @@ which contains the binning result. (Currently only the contigs that are below th
 Flow tree format, as explained by the Infomap devs,
 > The Tree format with an appended section of links with the flow between nodes within the same parent.
 - `multilayer.net`
-the unpartitioned network in Pajek format. It records the nodes and the links between the nodes. Mainly for debugging. Note that the nodes there are state nodes, see in [here](https://github.com/u-xixi/netbin/edit/main/README.md#get-the-final-binning)
+the unpartitioned network in Pajek format. It records the nodes and the links between the nodes. Mainly for debugging. Note that the nodes there are state nodes, see in [here](https://github.com/u-xixi/netbin/main/README.md#get-the-final-binning)
 - `infomap.clu` gives you the best assignment of nodes in the top module. It probably can give you the first impression of the network partitioning. This is how it looks:
 > \# node_num_id module flow </br>
 > 123 7 0.005
