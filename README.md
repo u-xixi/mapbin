@@ -32,6 +32,13 @@ the unpartitioned network in Pajek format. It records the nodes and the links be
 > \# node_num_id module flow </br>
 > 123 7 0.005
 
+## Data for Daniel
+Some testing files are available on osa. 
+- contig fasta: `/abscratch/xi/haplotagging-May2019/02_assembly/sample1/contigs.fasta`
+- Spades contig paths: `/abscratch/xi/haplotagging-May2019/02_assembly/sample1/contigs.paths`
+- contig binning results: `/abscratch/xi/haplotagging-May2019/03_binning/sample1/contig_bins/` or
+`/abscratch/xi/haplotagging-May2019/03_binning/sample1/concoct_out/concoct_bins`
+
 ## Dev status
 Currently I have ticked the box for the #1 and #2 functionalities above, and 3 is up for discussion. Read about the details of the implementation in below.
 ### Building the network
