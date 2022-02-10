@@ -22,6 +22,7 @@ def arg_handler(args):
     ah_bin_dir(args)
     ah_lr_reads(args)
     ah_pairing(args)
+    ah_assembly(args)
     # args.ctg_fa is required
     # handling reads and aln files:
 
@@ -47,7 +48,7 @@ def ah_contigs(args):
 def ah_min_ctg_len(args):
     if args.min_ctg_len < 1000:
         args.min_ctg_len = 1000
-        print("[::Warning::] minimum contig size must be >= 1500. set it to 1500.")
+        print("[::Warning::] minimum contig size must be >= 1000. set it to 1000.")
 
 
 def ah_output(args):
@@ -70,6 +71,10 @@ def ah_output(args):
         Path(args.out_dir).mkdir(parents=True, exist_ok=False)
 
     Path(args.out_dir + "bins").mkdir(parents=True, exist_ok=False)
+    args.unbinned_short_file = "".join([args.out_dir, "bins/", "unbinned.short.fa"])
+    args.im_pajek = args.out_dir + "multilayer.net"
+    args.im_ftree = args.out_dir + "infomap.ftree"
+    args.im_clu = args.out_dir + "infomap.clu"
 
 
 def ah_aln(args):
@@ -161,7 +166,7 @@ def ah_pairing(args) -> None:
 
 def ah_assembly(args) -> None:
     if args.is_assembly:
-        if args.assember == "spades":
+        if args.assembler == "spades":
             if args.ctg_paths:
                 print("[::Message::] \"Assembly\" mode on.")
                 print("[::Message::] Assembler: Spades. contig paths file: {}".format(args.ctg_paths))

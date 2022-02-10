@@ -1,7 +1,7 @@
 from infomap import Infomap
 from Bio import SeqIO
 from pysam import AlignmentFile, AlignedSegment
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, TextIO
 import time
 import sys
 import glob
@@ -9,6 +9,7 @@ from file_io import *
 from itertools import combinations
 from collections import defaultdict
 from parsers import *
+from random import shuffle, seed
 
 
 class NbContig():
@@ -28,7 +29,8 @@ class NbContig():
         self.num_id = num_id
 
 
-format_ctg_idf = lambda x: "_".join(x.strip().split(" ")[0].split("_")[:2])
+# format_ctg_idf = lambda x: "_".join(x.strip().split(" ")[0].split("_")[:2])
+format_ctg_idf = lambda x: x.strip().split(" ")[0]
 
 # def make_infomap_nodes(ctg_lookup: Dict[str, NbContig]):
 #     "multilayer network builder using Infomap API"
@@ -42,74 +44,133 @@ format_ctg_idf = lambda x: "_".join(x.strip().split(" ")[0].split("_")[:2])
 #     output: im_network
 
 
-def make_infomap_binned(args, im_network:Infomap, layer_idx, ctg_lookup):
+def make_complete_graph(nodes: List[NbContig], im_network, layer_idx) -> str:
+    if len(nodes) == 1:
+        return ""
 
-    def _get_bin_info_content(bin_fa):
-        # returns a set
-        print("[::Dev Message::] parsing \"{}\"".format(bin_fa))
-        fa_content = _get_seq_file_content(bin_fa)
-        fa_headers = [_parse_seq_name(i) for i in fa_content if i.startswith(">")]  # headers don't have ">"
-        fa_headers = [i for i in fa_headers if i in ctg_lookup]
-        n_edges = 0
+    else:
+        obuffer = []
+        link_count = 0
+        for i in range(len(nodes)):
+            for j in range(i+1, len(nodes)):
+                inode = nodes[i]
+                jnode = nodes[j]
+                im_network.add_multilayer_intra_link(layer_idx, inode.num_id,
+                                                     jnode.num_id, weight=1)
+                link_count += 1
+                obuffer.append("{0} {1} {2} {3}".format(layer_idx, inode.num_id, jnode.num_id, 1))
+        print("[:::Message:::] made complete graph with {} edges".format(link_count))
 
-        if len(fa_headers) > 1:
+        return "\n".join(obuffer)
 
-            for a, b in combinations(fa_headers, 2):
-                ctg_a = ctg_lookup[a]
-                ctg_b = ctg_lookup[b]
-                # print(ctg_a)
-                a_key = ctg_a.num_id
-                b_key = ctg_b.num_id
-                a2b_val = args.min_ctg_len / ctg_a.length
-                # b2a_key = " ".join([ctg_b.num_id, ctg_a.num_id])
-                b2a_val = args.min_ctg_len / ctg_b.length
-                links = [((layer_idx, a_key), (layer_idx, b_key), a2b_val),
-                         ((layer_idx, b_key), (layer_idx, a_key), b2a_val)]
-                # links = [((layer_idx, ctg_a), (layer_idx, ctg_b)),
-                #          ((layer_idx, ctg_b), (layer_idx, ctg_a))]
-                n_edges += 2
-                im_network.add_multilayer_links(links)
-            print("[::Dev Message::] added {} edges".format(n_edges) )
-            return 1
+
+def make_infomap_binned(args, im_network: Infomap, layer_idx,
+                        ctg_lookup: Dict[str, NbContig]) -> str:
+
+    def _subbin_handler(subbin: List[NbContig], obuffer:List[str]) -> NbContig:
+        """
+        decide which contig is the center (median) that connects to all the rest of contigs
+        which contig is the representative (biggest) that serves as the node connected to the other subbins.
+        this handler makes star
+        :return:
+        """
+        if len(subbin) == 1:
+            return subbin[0]
+
+        ctg_lens = [i.length for i in subbin]
+        ctg_lens.sort()
+        ctg_median = ctg_lens[len(ctg_lens) // 2 - 1]
+        ctg_max = ctg_lens[-1]
+
+        center_ctg = None
+        rep_ctg = None
+        circle_ctg = []
+
+        for i in subbin:
+            ilen = i.length
+            if ilen == ctg_median:
+                center_ctg = i
+            elif ilen == ctg_max:
+                rep_ctg = i
+                circle_ctg.append(rep_ctg)
+            else:
+                circle_ctg.append(i)
+
+        for i_ctg in circle_ctg:
+            im_network.add_multilayer_intra_link(layer_idx, i_ctg.num_id, center_ctg.num_id, weight=1)
+            # to be solved: weight between nodes
+            obuffer.append("{0} {1} {2} {3}".format(layer_idx, i_ctg.num_id, center_ctg.num_id, 1))
+        return rep_ctg
+
+    def make_network_bin_fa(bin_fa: str, s: int) -> str:
+        """
+
+        :param bin_fa: fasta file represent one bin
+        :param s: number of sub-bins
+        :return:
+        """
+        # step 1: decide the bin-dividing plan
+        # step 2: fill in the edges
+
+
+        # step 1
+        bin_headers = set(parse_contig_fa(bin_fa).keys())
+        bin_ctg = [ctg_lookup[i] for i in bin_headers if i in ctg_lookup]
+        # return make_complete_graph(nodes=bin_ctg, im_network=im_network, layer_idx=layer_idx)
+
+        if len(bin_ctg) <= s:
+            print("[:::Message:::] make complete graph for {}".format(bin_fa))
+            return make_complete_graph(nodes=bin_ctg, im_network=im_network, layer_idx=layer_idx)
+
         else:
-            return 0
-        # return im_edges
+            print("[:::Message:::] make density-reduced graph for {}".format(bin_fa))
+            bin_obuffer = []
+            seed(12345)
+            shuffle(bin_ctg)
 
-    def _get_seq_file_content(file_path):
+            N = len(bin_ctg)
+            Lmin = N//s
+            Lmax = Lmin + 1
+            all_L = [Lmax] * (N%s)
+            all_L.extend([Lmin]*(s - N%s))
+            # print("[:::Dev Message:::]network_utils, L133, no. nodes: {}; sizes: {}".format(N, all_L))
+            # print("[:::Dev Message:::]network_utils, L133, no. nodes: {}\n {}".format(bin_fa, N))
 
-        seq_file = SeqFile(file_path)
-        if seq_file.seqformat == "fasta":
-            return seq_file.file_content
-        else:
-            sys.exit("Invalid Fasta file: {}".format(file_path))
+            # step 2
+            l0 = 0
+            reps = []
+            for l1 in all_L:
+                i_subbin = bin_ctg[l0:l0+l1]
+                irep = _subbin_handler(i_subbin, obuffer)
+                reps.append(irep)
+                l0 += l1
 
-    # def _get_fasta_files_in_dir(dir, suffix):
-    #     # dir must ends up with "/"
-    #     return glob.glob(dir + "*." + suffix)
+            buffer_text_p2 = make_complete_graph(reps, im_network=im_network,
+                                layer_idx=layer_idx)
+            bin_obuffer.append(buffer_text_p2)
 
-    _parse_seq_name = lambda x: "_".join(x[1:-1].split("_")[:2])
+            return "\n".join(bin_obuffer)
 
+
+# def make_infomap_binned(args, im_network:Infomap, layer_idx, ctg_lookup, out_fhandle: TextIO)-> None:
+    obuffer = []
     for i_bin_dir in args.bin_dir:
         bin_fa_files = glob.glob(i_bin_dir + "*." + args.bin_suffix)
-        print("[::Message::] Parsing binning result directory \"{}\".".format(i_bin_dir))
+        print("[=== Binning layer ===] Parsing binning result directory \"{}\".".format(i_bin_dir))
         if not len(bin_fa_files):
             print("[::Warning::] No contigs detected in \"{}\". Directory skipped".format(i_bin_dir))
             continue
-        # i_edges = {}
 
         time_begin = time.time()
-        print("[::Message::] Parsing binning results...")
 
-        sig = 0
-        for bin_fa in bin_fa_files:
-            sig += _get_bin_info_content(bin_fa)
-
-        if sig == 0:
-            print("[::Warning::] No useful binning result in \"{}\". Directory skipped".format(i_bin_dir))
+        for i_fa in bin_fa_files:
+            i_buffer_text = make_network_bin_fa(bin_fa=i_fa, s=args.s)
+            obuffer.append(i_buffer_text)
 
         # update_dict_val(im_edges_content, i_edges)
         time_finish = time.time()
-        print("[=== Binning layer ===] parsing binning result takes {:.1f} secs".format(time_finish - time_begin))
+        print("[=== Binning layer ===] Processing binning result takes {:.1f} secs".format(time_finish - time_begin))
+        return "\n".join(obuffer)
 
 
 def make_infomap_pairing(args, im_network: Infomap, layer_idx, ctg_lookup):
@@ -229,9 +290,9 @@ def make_infomap_pairing(args, im_network: Infomap, layer_idx, ctg_lookup):
 
     if ctg_net:
         for k, v in ctg_net.items():
-            multilayer_link_source = (layer_idx, k[0])
-            multilayer_link_tgt = (layer_idx, k[1])
-            im_network.add_multilayer_link(multilayer_link_source, multilayer_link_tgt, v)
+            # multilayer_link_source = (layer_idx, k[0])
+            # multilayer_link_tgt = (layer_idx, k[1])
+            im_network.add_multilayer_intra_link(layer_idx, k[0], k[1], v)
         n_edges = len(ctg_net)
         print("[::Dev Message::] added {} edges".format(n_edges))
 
@@ -355,9 +416,7 @@ def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup):
         for ikey, ival in ctg_network.items():
             if ival > 0.001:
                 n_edges += 1
-                im_network.add_multilayer_link(source_multilayer_node=(layer_idx, ikey[0]),
-                                               target_multilayer_node=(layer_idx, ikey[1]),
-                                               weight=ival)
+                im_network.add_multilayer_intra_link(layer_idx, ikey[0], ikey[1], weight=ival)
         print("[:::Dev Message:::] added {} edges".format(n_edges))
 
     aln_file = args.aln_file
@@ -393,15 +452,19 @@ def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup):
     print("[:::Dev Message:::]ctg network building: {:.1f} secs".format(time_ctg_net - time_bars2ctgs))
 
 
-def make_infomap_assembly(args, im_network: Infomap, layer_idx: int, all_contigs: Set[str], ctg_lookup: Dict[str, NbContig]):
+def make_infomap_assembly(args, im_network: Infomap,
+                          layer_idx: int, all_contigs: Set[str],
+                          ctg_lookup: Dict[str, NbContig]):
     # get paths: {contig_num_id: [(path_left_end, path_right_end)]}
     #  Dict[int, List[Tuple]]
     time_begin = time.time()
+    # obuffer = []
+
     if args.assembler == "spades":
         path_segs = parse_spades_contig_paths(all_contigs, ctg_lookup, args.ctg_paths)
         contigs = list(path_segs.keys())
         contigs.sort()
-        print(len(contigs))
+
         counter = 0
         for i in range(len(contigs)):
             for j in range(i+1, len(contigs)):
@@ -410,46 +473,17 @@ def make_infomap_assembly(args, im_network: Infomap, layer_idx: int, all_contigs
                 isegs = path_segs[ic]
                 jsegs = path_segs[jc]
                 if isegs.intersection(jsegs):
-                    im_network.add_multilayer_link(source_multilayer_node=(layer_idx, ic),
-                                                   target_multilayer_node=(layer_idx, jc))
+                    im_network.add_multilayer_intra_link(layer_idx, ic, jc)
+                    # obuffer.append("{0} {1} {2}".format(layer_idx, ic, jc))
                     counter +=1
-        print("[=== Assembly layer ===] linked {} contigs".format(counter))
+        print("[=== Assembly layer ===] made {} links with {} contigs".format(counter, len(contigs)))
     time_end = time.time()
 
-    print("[:::Dev Message:::]assembly processing: {:.1f} secs".format(time_end - time_begin))
+    print("[=== Assembly layer ===] Processing assembly took {:.1f} secs".format(time_end - time_begin))
+    # return "\n".join(obuffer)
 
 
-
-
-
-
-
-# tqdm python for printing out the progress
-def generate_ctg_lookup(ctg_fa, min_ctg_len):
-    # function: generate ctg lookup dict
-    #           and initialize im by initializing the network and adding nodes
-    # change: node_id is no longer a str, but an int
-    ctg_lookup = {}
-    unbinned = []
-    i = 1
-    im_network = Infomap("-i multilayer --two-level")
-
-    for seq_record in SeqIO.parse(ctg_fa, "fasta"):
-        seq_len = len(seq_record)
-        if seq_len < min_ctg_len:
-           unbinned.append(seq_record)
-        else:
-            formatted_id = "_".join(seq_record.id.split("_")[:2])
-            cur_nbcontig = NbContig(formatted_id, seq_len, i)  # changed node_id to int
-            ctg_lookup[cur_nbcontig.id] = cur_nbcontig
-            im_network.add_node(node_id=i,
-                                name=formatted_id)
-
-        i += 1
-    return ctg_lookup, unbinned, im_network
-
-
-def generate_ctg_lookup_alt(contig_fa_lookup: Dict[str, str], min_ctg_len: int):
+def generate_ctg_lookup(contig_fa_lookup: Dict[str, str], min_ctg_len: int, unbinned_short_file:str):
     # alternative func for generate ctg lookup
     # function: generate ctg lookup dict
     #           and initialize im by initializing the network and adding nodes
@@ -461,30 +495,34 @@ def generate_ctg_lookup_alt(contig_fa_lookup: Dict[str, str], min_ctg_len: int):
     :return: ctg_lookup: Dict[str, NbContig]
             contigs that passed the min contig length check, formatted for use in infomap
     :return: unbinned: [fasta record as string]
-    :return: im_network: the infomap network built by this func
+    :return: im_network is no longer generated here.
     """
-    ctg_lookup = {}
-    unbinned = []
-    i = 1
     im_network = Infomap("-s 1")
+    ctg_lookup = {}
+    unbinned_short = []
+    i = 1
 
     for iheader, iseq in contig_fa_lookup.items():
         ilen = len(iseq)
 
         if ilen < min_ctg_len:
-            unbinned.append("\n".join([">" + iheader, iseq]))
+            unbinned_short.append("\n".join([">" + iheader, iseq]))
         else:
-            formatted_id = "_".join(iheader.split("_")[:2])
-            cur_nbcontig = NbContig(formatted_id, ilen, i)  # changed node_id to int
+            formatted_id = format_ctg_idf(iheader)
+            cur_nbcontig = NbContig("", ilen, i)  # changed node_id to int
             ctg_lookup[iheader] = cur_nbcontig  # changed the key to the fasta header
-            im_network.add_node(node_id=i,
-                                name=formatted_id)
+            im_network.set_name(i, formatted_id)
+            # im_network.add_node(node_id=i,
+            #                     name=formatted_id)
 
         i += 1
-    return ctg_lookup, unbinned, im_network
+    print("[=== Parsing contigs ===] {} contigs with minimum length {} for binning".format(len(ctg_lookup), min_ctg_len))
+    print("[=== Parsing contigs ===] writing out contigs below minimum length to file: {}" .format(unbinned_short_file))
+    with open(unbinned_short_file, 'w') as fw:
+        fw.write("\n".join(unbinned_short) + "\n")
+
+    return ctg_lookup, im_network
 
 
-def run_infomap(im_network:Infomap):
-    im_network.run()
 
 

@@ -11,7 +11,8 @@ def binning(args):
     # step 1: build a network
     # ctg_lookup, unbinned, im_network = generate_ctg_lookup(args.ctg_fa, args.min_ctg_len)
     contig_fa_lookup = parse_contig_fa(args.ctg_fa)
-    ctg_lookup, unbinned, im_network = generate_ctg_lookup_alt(contig_fa_lookup, args.min_ctg_len)
+    ctg_lookup, im_network = generate_ctg_lookup(contig_fa_lookup, args.min_ctg_len, args.unbinned_short_file)
+
 
     # step 2: add links
     if args.is_binned:
@@ -30,7 +31,11 @@ def binning(args):
         make_infomap_assembly(args, im_network,
         layer_idx=4, all_contigs=set(contig_fa_lookup.keys()), ctg_lookup=ctg_lookup)
 
-    # run_infomap(im_network)
+    # set_im_node_names(ctg_lookup, im_network)
+    im_network.run(ftree=True)
+    im_network.write_pajek(args.im_pajek)
+    im_network.write_flow_tree(args.im_ftree)
+    im_network.write_clu(args.im_clu)
 
     # step 3: run infomap
     # step 4: turn modules into bins
@@ -44,7 +49,7 @@ def command_line_parser():
     parser.add_argument("-o", "--out-dir", required=True, dest="out_dir",
                         metavar="out-dir", help="output directory")
     parser.add_argument("-mcl", "--min-ctg-len", type=int, default=2500, dest="min_ctg_len",
-                        metavar="contig-min-length", help="minimum contig size. must be >= 1500")
+                        metavar="contig-min-length", help="minimum contig size. must be >= 1000")
 
     #  integration of binning result. activated by flag -b
     parser.add_argument("-b", "--bins", dest="bin_dir", nargs="+",
@@ -52,6 +57,8 @@ def command_line_parser():
                         help="enable binning integration. Require directory of binning output. can be multiple")
     parser.add_argument("-sfx", "--bin-suffix", default="fa", dest="bin_suffix",
                         metavar="binned-fasta-extension", help="binned fasta file extensions. default: fa")
+    parser.add_argument("-csl", "--clique-size-limit", default=25, dest="s",
+                        metavar="clique-size-limit", help="allowed biggest clique for binning network. default: 25")
 
     #  using assembly graph.
     parser.add_argument("-a", "--assembly", action="store_true", dest="is_assembly",
