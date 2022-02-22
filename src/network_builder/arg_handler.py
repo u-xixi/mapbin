@@ -15,7 +15,7 @@ def arg_handler(args):
     # handling output dir
 
     ah_output(args)
-    ah_aln(args)
+    # ah_aln(args)
     ah_read(args)
     args.is_binned, args.is_compo = [False] * 2
 
@@ -77,20 +77,20 @@ def ah_output(args):
     args.im_clu = args.out_dir + "infomap.clu"
 
 
-def ah_aln(args):
-    aln_file = args.aln_file
-    if aln_file:
-        if len(aln_file) > 2:
-            sys.exit("[::Error::] only 1 or 2 sam files are allowed. "
-                     "if 2, they should be correspondent to a paired end dataset.")
-        elif len(aln_file) == 2:
-            args.aln_r1 = aln_file[0]
-            args.aln_r2 = aln_file[1]
-            del args.aln_file
-            print("[::Message::] Checking alignment files:\nR1:{0}, \n\tR2:{1}".format(args.aln_r1, args.aln_r2))
-        elif len(aln_file) == 1:
-            args.aln_file = aln_file[0]
-            print("[::Message::] Checking alignment files:\n {}".format(args.aln_file))
+# def ah_aln(args):
+#     aln_file = args.aln_file
+#     if aln_file:
+#         if len(aln_file) > 2:
+#             sys.exit("[::Error::] only 1 or 2 sam files are allowed. "
+#                      "if 2, they should be correspondent to a paired end dataset.")
+#         elif len(aln_file) == 2:
+#             args.aln_r1 = aln_file[0]
+#             args.aln_r2 = aln_file[1]
+#             del args.aln_file
+#             print("[::Message::] Checking alignment files:\nR1:{0}, \n\tR2:{1}".format(args.aln_r1, args.aln_r2))
+#         elif len(aln_file) == 1:
+#             args.aln_file = aln_file[0]
+#             print("[::Message::] Checking alignment files:\n {}".format(args.aln_file))
 
 
 def ah_read(args) -> None:
@@ -151,17 +151,24 @@ def ah_lr_reads(args):
         # stub
 
 
+# def ah_pairing(args) -> None:
+#     if args.is_pair:
+#         print("[::Message::] Found paired-end read file(s): {}".format(args.pe_reads))
+#         print("[::Message::] \"Pairing\" mode on")
+#         if not args.pe_reads and not args.aln_file and not args.aln_r1:
+#             args.is_pair = False
+#             print("[::Warning::] Neither the read file(s) or read to contig alignments provided. Disabling read pairing")
+#         if args.pe_reads and not args.aln_file and not args.aln_r1:
+#             args.is_pair = False
+#             print("[::Calling BWA::] ...is actually not implemented yet. Disabling pairing...")
+#             # stub
 def ah_pairing(args) -> None:
     if args.is_pair:
-        print("[::Message::] Found paired-end read file(s): {}".format(args.pe_reads))
-        print("[::Message::] \"Pairing\" mode on")
-        if not args.pe_reads and not args.aln_file and not args.aln_r1:
-            args.is_pair = False
-            print("[::Warning::] Neither the read file(s) or read to contig alignments provided. Disabling read pairing")
-        if args.pe_reads and not args.aln_file and not args.aln_r1:
-            args.is_pair = False
-            print("[::Calling BWA::] ...is actually not implemented yet. Disabling pairing...")
-            # stub
+        if args.aln_file:
+            print("[:::Message:::] \"Pairing\" mode on.")
+            print("[:::Message:::] Found alignment file: {}".format(args.aln_file))
+        elif args.pe_reads:
+            pass
 
 
 def ah_assembly(args) -> None:

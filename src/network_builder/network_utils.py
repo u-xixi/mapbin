@@ -173,133 +173,64 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
         return "\n".join(obuffer)
 
 
-def make_infomap_pairing(args, im_network: Infomap, layer_idx, ctg_lookup):
-
-    def _update_edge_weight(k, v):
-        nonlocal ctg_net
-        if k in ctg_net:
-            ctg_net[k] += v
+def make_infomap_pairing(args, im_network: Infomap, layer_idx:int, ctg_lookup:Dict[str, NbContig]):
+    def _update_dict_val(k: Tuple[int, int], v: int, ctg_links: Dict[Tuple[int, int], int]) -> None:
+        if k in ctg_links:
+            ctg_links[k] += v
         else:
-            ctg_net[k] = v
+            ctg_links[k] = v
 
-    def _get_ctg_info(ctg_raw_str: str) -> (str, int):
-        # formatted_id = "_".join(ctg_raw_str.split("_")[:2])
-        formatted_id = format_ctg_idf(ctg_raw_str)
-        if formatted_id in ctg_lookup:
-            nbctg = ctg_lookup[formatted_id]
-            return nbctg.num_id, nbctg.length
-        return None, None
+    def process_sam() -> Dict[Tuple[int, int], int]:
+        sam_handle = AlignmentFile(args.aln_file, 'rb')
+        ctg_links = {}
+        waiting_read_dict = {}
+        for i_read in sam_handle.fetch():
+            if not i_read.is_paired or i_read.is_secondary or i_read.is_supplementary:
+                # if read.is_secondary or read.is_supplementary:
+                continue
 
-    def _conclude_last_pair(r1_: AlignedSegment, r2_: AlignedSegment) -> None:
-        # get the list of ctg that r1 and r2 share
-        # this function changes ctg_net
-        # nonlocal ctg_net
-        nonlocal test_counter
-        r1_ctg_ = r1_.reference_name
-        r2_ctg_ = r2_.reference_name
+            i_rid = i_read.query_name
+            if i_rid not in waiting_read_dict:
+                if i_read.is_read1:
+                    waiting_read_dict[i_rid] = (i_read, None)
+                elif i_read.is_read2:
+                    waiting_read_dict[i_rid] = (None, i_read)
 
-        if r1_ctg_ != r2_ctg_:
-            test_counter += 1
-            # print("[:::Dev Message:::] find pair with diff parents +1")
+            else:
+                _imate = waiting_read_dict.pop(i_rid)
+                i_mate = None
+                if i_read.is_read1 and _imate[1]:
+                    i_mate = _imate[1]
+                elif i_read.is_read2 and _imate[0]:
+                    i_mate = _imate[0]
 
-            r1_ctg_num_id, r1_ctg_len = _get_ctg_info(r1_ctg_)
-            r2_ctg_num_id, r2_ctg_len = _get_ctg_info(r2_ctg_)
-
-            if r1_ctg_num_id and r2_ctg_num_id:
-                ctg_pair_key12 = (r1_ctg_num_id, r2_ctg_num_id)
-                ctg_pair_key21 = (r2_ctg_num_id, r1_ctg_num_id)
-                edge_wt12 = r1.reference_length/r1_ctg_len
-                edge_wt21 = r2.reference_length/r2_ctg_len
-                _update_edge_weight(ctg_pair_key12, edge_wt12)
-                _update_edge_weight(ctg_pair_key21, edge_wt21)
-
-            # this means the pair is gonna be kept
-            # in this case, first, format the r1_ctg and r2_ctg strings
-
-
-
-    # def write_pairing_layer(ctg_net_: Dict):
-    #     ctg_net_as_list = [" ".join([" ".join(k), "{:.5f}".format(v)]) for k, v in ctg_net_.items()]
-    #     ctg_net_as_list.sort()
-    #     del ctg_net_
-    #     return "\n".join(ctg_net_as_list) + "\n"
+                i_ctg_id = i_read.reference_name
+                i_mate_ctg_id = i_mate.reference_name
+                if i_ctg_id in ctg_lookup and \
+                        i_mate_ctg_id in ctg_lookup and \
+                        i_ctg_id != i_mate_ctg_id:
+                    i_nbctg = ctg_lookup[i_ctg_id]
+                    i_mate_nbctg = ctg_lookup[i_mate_ctg_id]
+                    ij_weight = (i_read.query_alignment_length +
+                                 i_mate.query_alignment_length)/(i_nbctg.length + i_mate_nbctg.length)
+                    _update_dict_val((i_nbctg.num_id, i_mate_nbctg.num_id), ij_weight, ctg_links)
+        sam_handle.close()
+        return ctg_links
 
     time_begin = time.time()
-    print("[::Message::] Parsing alignment...")
+    print("[:::Message:::] Parsing alignment...")
 
-    alnfile = AlignmentFile(args.aln_file, 'r')
-    ctg_net = {}
+    links = process_sam()
+    n_edges = 0
+    for (i, j), w in links.items():
+        if w > 0.00001:
+            im_network.add_multilayer_intra_link(layer_idx, i, j, w)
+            n_edges += 1
+    time_finish = time.time()
 
-    waiting_read_dict = defaultdict(lambda: [None, None])
-    # r1 = None
-    # r2 = None
-    test_counter = 0
-
-    for read in alnfile.fetch():
-
-        if not read.is_proper_pair or read.is_secondary or read.is_supplementary:
-            # if read.is_secondary or read.is_supplementary:
-            continue
-
-        read_id = read.query_name
-        if read_id not in waiting_read_dict:
-            if read.is_read1:
-                waiting_read_dict[read_id][0] = read
-            else:
-                waiting_read_dict[read_id][1] = read
-
-        else:
-            if read.is_read1:
-                r1 = read
-                r2 = waiting_read_dict[read_id][1]
-                _conclude_last_pair(r1, r2)
-                if waiting_read_dict[read_id][0]:
-                    print("[:::Dev Warning:::] pair abnormal: 2x R1 of read \"{}\"".format(read_id))
-            else:
-                r2 = read
-                r1 = waiting_read_dict[read_id][0]
-                _conclude_last_pair(r1, r2)
-                if waiting_read_dict[read_id][1]:
-                    print("[:::Dev Warning:::] pair abnormal: 2x R2 of read \"{}\"".format(read_id))
-            del waiting_read_dict[read_id]
-            # test_counter += 1
-
-
-        # if read.is_read1:
-        #     if r1 and r2:
-        #         _conclude_last_pair(r1, r2, test_counter)
-        #         # test_counter += 1
-        #
-        #     if read.is_unmapped or read.mate_is_unmapped:
-        #         r1 = None
-        #     else:
-        #         r1 = read
-        # elif read.is_read2:
-        #     if not r1:
-        #         r2 = None
-        #     else:
-        #         r2 = read
-
-    print("[::Dev Message::]Line 185: test_counter = {} ".format(test_counter))
-    print("[::Dev Message::]waiting read dict size {}".format(len(waiting_read_dict)))
-    alnfile.close()
-
-    time_checkpoint1 = time.time()
-    print("[=== Read pairing layer ===] parsing alignment takes {:.1f} secs".format(time_checkpoint1 - time_begin))
-    print("[::Dev Message::]Line 189: size of ctg_net = {} ".format(len(ctg_net)))
-
-    if ctg_net:
-        for k, v in ctg_net.items():
-            # multilayer_link_source = (layer_idx, k[0])
-            # multilayer_link_tgt = (layer_idx, k[1])
-            im_network.add_multilayer_intra_link(layer_idx, k[0], k[1], v)
-        n_edges = len(ctg_net)
-        print("[::Dev Message::] added {} edges".format(n_edges))
-
-
-    time_checkpoint2 = time.time()
-    print("[=== Read pairing layer ===] Build infomap layer takes {:.1f} secs".format(time_checkpoint2- time_checkpoint1))
-
+    print("[=== Read pairing layer ===] Made {} edges based on read pairing.".format(n_edges))
+    print("[=== Read pairing layer ===] Processing read pairing takes {:.1f} secs".format(
+        time_finish - time_begin))
 
 
 def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup):

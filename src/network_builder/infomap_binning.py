@@ -57,7 +57,7 @@ def command_line_parser():
                         help="enable binning integration. Require directory of binning output. can be multiple")
     parser.add_argument("-sfx", "--bin-suffix", default="fa", dest="bin_suffix",
                         metavar="binned-fasta-extension", help="binned fasta file extensions. default: fa")
-    parser.add_argument("-csl", "--clique-size-limit", default=25, dest="s",
+    parser.add_argument("-csl", "--clique-size-limit", default=25, dest="s", type=int,
                         metavar="clique-size-limit", help="allowed biggest clique for binning network. default: 25")
 
     #  using assembly graph.
@@ -78,19 +78,19 @@ def command_line_parser():
 
     # using read pairing information
     parser.add_argument("-p", "--pairing", action="store_true", dest="is_pair",
-                        help="integrate read pairing info. Require paired end reads to contigs alignments. See detail.")
+                        help="integrate read pairing info. Require paired end reads or their alignments to contigs.")
 
     #  using read files. for pairs or barcodes.
     #  !!!!fix this: now it accept only 2 sep files. should be able to handle interleaved file too.
     parser.add_argument("-pe", "--paired-end", nargs="+", dest="pe_reads",
-                        metavar="paired-reads", help="paired end read fastq in 2 separate files")
+                        metavar="paired-reads", help="Still under development. paired end read fastq in 2 separate files")
     parser.add_argument("-se", "--single_end", dest="se_reads",
                         metavar="single-read", help="single-end read fastq")
 
     #  using sam/bam files. must have if using read clouds or pairing info.
-    parser.add_argument("-aln", "--alignment", nargs="+", dest="aln_file",
-                        metavar="alignment-sam",
-                        help="reads to contigs alignments. sam/bam. one file for all, or 2 files for a pair.")
+    parser.add_argument("-aln", "--alignment", dest="aln_file",
+                        metavar="alignment-sorted-indexed-bam",
+                        help="reads to contigs alignments. bam sorted by leftmost coordinates and indexed. one file for both r1 and r2 reads.")
 
 
     parser.set_defaults(func=binning)
