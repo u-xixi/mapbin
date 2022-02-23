@@ -1,13 +1,9 @@
 from infomap import Infomap
-from Bio import SeqIO
 from pysam import AlignmentFile, AlignedSegment
 from typing import Dict, List, Tuple, TextIO
 import time
-import sys
 import glob
 from file_io import *
-from itertools import combinations
-from collections import defaultdict
 from parsers import *
 from random import shuffle, seed
 
@@ -169,7 +165,7 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
 
         # update_dict_val(im_edges_content, i_edges)
         time_finish = time.time()
-        print("[=== Binning layer ===] Processing binning result takes {:.1f} secs".format(time_finish - time_begin))
+        print("[=== Binning layer ===] Processing binning result took {:.1f} secs".format(time_finish - time_begin))
         return "\n".join(obuffer)
 
 
@@ -213,6 +209,8 @@ def make_infomap_pairing(args, im_network: Infomap, layer_idx:int, ctg_lookup:Di
                     i_mate_nbctg = ctg_lookup[i_mate_ctg_id]
                     ij_weight = (i_read.query_alignment_length +
                                  i_mate.query_alignment_length)/(i_nbctg.length + i_mate_nbctg.length)
+                    # no need to sort the keys because the mate always shows up before the read
+                    # thus always i_nbctg.num_id > i_mate_nbctg.num_id
                     _update_dict_val((i_nbctg.num_id, i_mate_nbctg.num_id), ij_weight, ctg_links)
         sam_handle.close()
         return ctg_links
@@ -223,20 +221,28 @@ def make_infomap_pairing(args, im_network: Infomap, layer_idx:int, ctg_lookup:Di
     links = process_sam()
     n_edges = 0
     for (i, j), w in links.items():
-        if w > 0.00001:
+        if w > 0.001:
             im_network.add_multilayer_intra_link(layer_idx, i, j, w)
             n_edges += 1
     time_finish = time.time()
 
     print("[=== Read pairing layer ===] Made {} edges based on read pairing.".format(n_edges))
-    print("[=== Read pairing layer ===] Processing read pairing takes {:.1f} secs".format(
+    print("[=== Read pairing layer ===] Processing read pairing took {:.1f} secs".format(
         time_finish - time_begin))
 
 
-def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup):
+def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup) -> None:
+    """
+    does 3 steps:
+    1. get read-to-barcode mapping
+    2. get {barcode: (ctg_num_id, aligned_bases, ctg_length)}
+    3. establish ctg-to-ctg edges.
+    The edge weight is based on aligned_bases to total_bases
+    The edge weight has to be > 0.001 (for now)
+    """
 
-    def _get_reads2bars():
-        seqfile = SeqFile(seq_file_path)
+    def _get_reads2bars(seq_file: str):
+        seqfile = SeqFile(seq_file)
         seq_idf = seqfile.idf
         reads2bars = {}
 
@@ -247,140 +253,121 @@ def make_infomap_linked(args, im_network: Infomap, layer_idx:int, ctg_lookup):
                 reads2bars[iline_split[0]] = iline_split[-1]
         return reads2bars
 
-    _update_ctg_dict = lambda dict_, elem_key, elem_val: dict_[elem_key] + elem_val if elem_key in dict_ else elem_val
-
-    def _update_bars2ctgs(base_dict, update_dict):
-        # update_elem = lambda elem_k, elem_v: base_dict.setdefault(elem_k, []).append(elem_v)
-        #  the barcode has a list of (contigs, mapped_base_perc)
-        for key, val in update_dict.items():
-            if key in base_dict:
-                base_dict[key].append(val)
-            else:
-                base_dict[key] = [val]
-            # update_elem(key, val)
-
-    def _bars2ctgs_fltr(bars2ctgs_dict):
-        bars2rm = []
-        for bar, ctgs in bars2ctgs_dict.items():
-            if len(ctgs) < 2:
-                bars2rm.append(bar)
-
-        for bar in bars2rm:
-            del bars2ctgs_dict[bar]
-        # return bars2ctgs
-
-    def _get_bars2ctgs(alignment_file:str):
-        # nonlocal aln_file
-        # nonlocal ctg_lookup
-        bars2ctgs = {}  # {barcode: [contigs]}
-        # test_counter = 0
-        reads2bars = _get_reads2bars()
-        # print("[:::Dev Message:::] Line 278, reads2bars size: {}".format(len(reads2bars)))
-        # checkpoint: successful till here
-
-        aln_handle = AlignmentFile(alignment_file, 'rb')
-        # print("[:::Dev Message:::] Line 281, no. alignment ref: {}".format(len(aln_handle.references)))
-        # print("[:::Dev Message:::] Line 282, ctg lookup has {} items".format(len(ctg_lookup)))
-
-        # check if the formatting of contig names works: debugged
-        # test_ctg = sample(aln_handle.references, 1)[0]
-        # test_ctg_formatted = format_ctg_idf(test_ctg)
-        # test_ctg_in_lookup = sample(ctg_lookup.keys(), 1)[0]
-        # print("[:::Dev Message:::] Line 291, ctg from aln file: {}\nctg from ctg_lookup: {}"
-        #       .format(test_ctg_formatted, test_ctg_in_lookup))
-
-        for i_ctg in aln_handle.references:
-            i_formatted_ctg = format_ctg_idf(i_ctg)
-
-            if i_formatted_ctg in ctg_lookup:
-                # tho it is an inner function, it can access ctg_lookup
-                i_ctg_len = ctg_lookup[i_formatted_ctg].length
-                i_ctg_numid = ctg_lookup[i_formatted_ctg].num_id
-                ctg_dict = {}  # {barcode: aligned_bases}
-
-                for iread in aln_handle.fetch(i_ctg):
-                    if iread.is_unmapped or iread.is_secondary or iread.is_supplementary:
-                        continue
-
-                    cur_bar = reads2bars[iread.query_name]
-                    if cur_bar in ctg_dict:
-                        # print("[:::Dev Message:::] Line 307, in ctg_dict:\n{}: {}".format(cur_bar, ctg_dict[cur_bar]))
-                        ctg_dict[cur_bar] += iread.reference_length
-                    else:
-                        ctg_dict[cur_bar] = iread.reference_length
-
-                if ctg_dict:
-                    # test_counter += 1  ## debugged
-                    # now the dict is being "harvested"
-                    # ctg_dict: {bar: (contig_name, alignment_weighted_by_contig_size)}
-                    ctg_dict = {k: (i_ctg_numid, v / i_ctg_len) for k, v in ctg_dict.items()}
-                    _update_bars2ctgs(bars2ctgs, ctg_dict)
-
-        aln_handle.close()
-        # print("[:::Dev Message:::]Line 312, test_counter = {}".format(test_counter))
-
-        _bars2ctgs_fltr(bars2ctgs)
-        return bars2ctgs
-
-    def _update_ctg_network(ctg_network_dict: Dict, key_ ,val_):
-    # def _update_ctg_network(key_, val_):
-        if key_ in ctg_network_dict:
-            ctg_network_dict[key_] += val_
+    def _update_ctg_dict(dict_:Dict[str, int], elem_key: str, elem_val: int)-> None:
+        """when iter over each contig, a dict {bar: weight} is made.
+        this call updates the dict"""
+        if elem_key in dict_:
+            dict_[elem_key] += elem_val
         else:
-            ctg_network_dict[key_] = val_
+            dict_[elem_key] = elem_val
 
-    def make_barcode_network(bars2ctgs_dict:Dict[str, List[Tuple[int, float]]]):
-        ctg_network = {}  # (contig_x, contig_y) as key
+    def _update_bars2ctgs(b2c: Dict[str, List[Tuple[int, int, int]]], ctg_dict: Dict[str, int], ctg_id: str) -> None:
+        """b2c: {bar: (ctg_num_id, mapped_bases, ctg_len)}
+        ctg_dict: {bar: n_mapped_bases}"""
+        ctg = ctg_lookup[ctg_id]
+        ctg_num_id = ctg.num_id
+        ctg_len = ctg.length
+        for k, v in ctg_dict.items():
+            if k in b2c:
+                b2c[k].append((ctg_num_id, v, ctg_len))
+            else:
+                b2c[k] = [(ctg_num_id, v, ctg_len)]
 
-        for bar, contig_list in bars2ctgs.items():
-            # contigs = [_parse_contig_name(i.id) for i in contig_list]
-            for combo in combinations(contig_list, 2):  # permutations returns both (a, b) and (b,a)
-                key01 = (combo[0][0], combo[1][0])
-                val01 = combo[0][1]
-                key10 = (combo[1][0], combo[0][0])
-                val10 = combo[1][1]
 
-                _update_ctg_network(ctg_network, key01, val01)
-                _update_ctg_network(ctg_network, key10, val10)
+    def get_bars2ctgs():
+        b2c = {}  # bars2contigs, {barcode: [contigs]}
+        reads2bars = {}
+        if args.se_reads:
+            reads2bars = _get_reads2bars(args.se_reads)
+        if args.pe_reads:
+            reads2bars.update(_get_reads2bars(args.pe_reads[0]))
+        print("[:::Message:::] Processed {} reads with unique ids.".format(len(reads2bars)))
 
-        n_edges = 0
-        for ikey, ival in ctg_network.items():
-            if ival > 0.001:
-                n_edges += 1
-                im_network.add_multilayer_intra_link(layer_idx, ikey[0], ikey[1], weight=ival)
-        print("[:::Dev Message:::] added {} edges".format(n_edges))
+        sam_handle = AlignmentFile(args.aln_file, 'rb')
+        last_ctg = None
+        i_ctg_dict = {}
 
-    aln_file = args.aln_file
-    seq_file_path = ""
-    if args.se_reads:
-        # need fixing: can only accept se reads atm
-        seq_file_path = args.se_reads
-    elif args.pe_reads:
-        seq_file_path = args.pe_reads[0]
+        for i_read in sam_handle.fetch():
+            if i_read.is_unmapped or i_read.is_secondary or i_read.is_supplementary:
+                continue
 
-    # layer_id = str(layer_idx)
-    # im_layer_content = set()
+            i_ctg = i_read.reference_name
+            if i_ctg not in ctg_lookup:
+                continue
+
+            if not last_ctg:
+                last_ctg = i_ctg
+                i_aln_len = i_read.query_alignment_length
+                i_bar = reads2bars[i_read.query_name]
+                i_ctg_dict[i_bar] = i_aln_len
+            elif i_ctg != last_ctg:
+                # conclude the last contig: update the b2c
+                _update_bars2ctgs(b2c, i_ctg_dict, last_ctg)
+                # set up the new contig
+                i_ctg_dict = {}
+                last_ctg = i_ctg
+                i_aln_len = i_read.query_alignment_length
+                i_bar = reads2bars[i_read.query_name]
+                i_ctg_dict[i_bar] = i_aln_len
+            else:
+                i_aln_len = i_read.query_alignment_length
+                i_bar = reads2bars[i_read.query_name]
+                _update_ctg_dict(i_ctg_dict, i_bar, i_aln_len)
+
+        sam_handle.close()
+
+        return b2c
+
+    def _make_ctg_link_single_bar(ctg_links: Dict[Tuple[int, int], float],
+                                  ictgs: List[Tuple[int, int, int]]) -> None:
+        nctgs = len(ictgs)
+        for i in range(nctgs):
+            for j in range(i, nctgs):
+                ik = ictgs[i][0]
+                jk = ictgs[j][0]
+                k = None
+                if ik < jk:
+                    k = (ik, jk)
+                else:
+                    k = (jk, ik)
+
+                v = (ictgs[i][1]+ ictgs[j][1])/(ictgs[i][2]+ ictgs[j][2])
+                if k in ctg_links:
+                    ctg_links[k] += v
+                else:
+                    ctg_links[k] = v
+
+    def generate_ctg2ctg_edges(bars2ctgs_dict:Dict[str, List[Tuple[int, int, int]]],
+                               min_bar_size: int) -> Dict[Tuple[int, int], float]:
+        ctg_links = {}
+        test_nbars = 0
+        for ibar, ictgs in bars2ctgs_dict.items():
+            if len(ictgs) >= min_bar_size:
+                _make_ctg_link_single_bar(ctg_links, ictgs)
+                test_nbars += 1
+
+        print("[:::Dev Message:::] no. legit bars: {}".format(test_nbars))
+        return ctg_links
+
+    print("[=== Linked read layer ===] Parsing linked reads...")
     time_begin = time.time()
-    bars2ctgs = _get_bars2ctgs(aln_file)
 
-    # for sanity check
-    print("[:::Dev Message:::]bars2ctgs size: {}".format(len(bars2ctgs)))
-    # sanity check passed
-    # bars2ctgs elements:
-    # BX:Z:A61B28C05D34: [(1, 0.00021912252873939136), (6, 0.0005723737009561289), (2428, 0.1162340178225494)]
-    # icounter = 0
-    # for k, v in bars2ctgs.items():
-    #     print("{}: {}".format(k, v))
-    #     icounter += 1
-    #     if icounter > 2:
-    #         break
-
+    bars2ctgs = get_bars2ctgs()
+    print("[:::Message:::] processed reads with {} barcodes".format(len(bars2ctgs)))
     time_bars2ctgs = time.time()
     print("[:::Dev Message:::]bars2ctgs: {:.1f} secs".format(time_bars2ctgs - time_begin))
+    # bars2ctgs elements:
+    # BX:Z:A61B28C05D34: [(1, 0.00021912252873939136), (6, 0.0005723737009561289), (2428, 0.1162340178225494)]
+    links = generate_ctg2ctg_edges(bars2ctgs, args.min_bar_size)
+    nedges = 0
+    for k, v in links.items():
+        if v > 0.001:
+            im_network.add_multilayer_intra_link(layer_idx, k[0], k[1], v)
+            nedges += 1
 
-    make_barcode_network(bars2ctgs)
-    time_ctg_net = time.time()
-    print("[:::Dev Message:::]ctg network building: {:.1f} secs".format(time_ctg_net - time_bars2ctgs))
+    time_finish = time.time()
+    print("[=== Linked read layer ===] made {} edges based on read barcodes".format(nedges))
+    print("[=== Linked read layer ===] Processing read linkage took {:.1f} secs".format(time_finish - time_begin))
 
 
 def make_infomap_assembly(args, im_network: Infomap,

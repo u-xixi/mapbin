@@ -98,30 +98,18 @@ def ah_read(args) -> None:
     # if paired end in 1 file: args.paired_end_reads exist. stub: This is not implemented in the arg parser yet.
     # if single end: there is args.single_read_file
     # args.reads_exist = False
+    if args.se_reads:
+        print("[:::Message:::] Found single-end reads {}".format(args.se_reads))
     if args.pe_reads:
-        print("[::Message::] Found paired-end reads {}".format(args.pe_reads))
-        reads = args.pe_reads
-        args.se_reads = False
-        if len(reads) == 1:
-            print("[::Message::] Reads as interleaved {}".format(args.pe_reads))
+        print("[:::Message:::] Found paired-end reads {}".format(args.pe_reads))
+        if len(args.pe_reads) == 1:
+            print("[:::Message:::] Reads as interleaved {}".format(args.pe_reads))
+        elif len(args.pe_reads) == 2:
+            print("[:::Message:::] Reads as uninterleaved duo {}".format(args.pe_reads))
 
-            #  stubL read paired end reads in interleaved format
-            # args.reads_exist = True
-            # stub
-            # read paired end reads in interleaved format
-        elif len(reads) == 2:
-            print("[::Message::] Reads as uninterleaved duo {}".format(args.pe_reads))
-            # args.reads_exist = True
-
-            # stub
-            # read paired end R1 and R2 in separate files
         else:
-            print("[::Warning::] discard invalid paired end reads:{}".format(args.pe_reads))
+            print("[:::Warning:::] discard unexpected paired end reads:{}".format(args.pe_reads))
             args.pe_reads = False
-
-    elif args.se_reads:
-        # args.reads_exist = True
-        args.pe_reads = False
 
 
 def ah_bin_dir(args):

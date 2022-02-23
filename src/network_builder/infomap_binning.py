@@ -74,7 +74,8 @@ def command_line_parser():
     #  using linked reads
     parser.add_argument("-lr", "--linked-reads", action="store_true", dest="is_lr",
                         help="enable integration of read cloud info. Read file required")
-    parser.add_argument("--lr-min-size", type=int, default=2, dest="min_bar_size", help="minimum read cloud size")
+    parser.add_argument("-bsl", "--bar-size-limit", type=int, default=2, dest="min_bar_size",
+                        help="minimum read cloud size. Default: 2")
 
     # using read pairing information
     parser.add_argument("-p", "--pairing", action="store_true", dest="is_pair",
