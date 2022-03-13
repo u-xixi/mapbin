@@ -2,7 +2,7 @@
 
 ## Requirements
 - Python 3.8 or 3.9
-- [infomap 2.0.0](https://github.com/mapequation/infomap) (`pip install infomap`)
+- [infomap >= 2.0.0](https://github.com/mapequation/infomap) (`pip install infomap`)
 - [pysam 0.18.0](https://pysam.readthedocs.io/en/latest/index.html) (`pip install pysam`)
 - Lower versions might still work, but no promises
 
@@ -17,7 +17,9 @@ The program does 3 main things:
 python netbin/src/network_builder/infomap_binning.py -c contigs.fasta -mcl 3000 \
 -b metabat_bins -sfx fa -o netbin_out \
 -a -A spades -P contigs.paths \
--p -aln reads2contigs.bam
+-p -aln reads2contigs.bam \
+-lr -se single_end_reads.fq.gz \
+-pe paired_end_r1.fq.gz paired_end_r2.fq.gz
 ```
 You must set `-c <fasta path>` and `-o <out directory>`.
 
@@ -25,13 +27,18 @@ You get to choose what you want to use to build the network of contigs in Step 1
 - **Existing binning result** `-b <binning result directory>`
 - **An assembly graph** `-a` and you have to set `-A <assembler> -gfa <gfa_file>` or `-P <spades_contig_paths>` for the assembly graph files too
 - **read pairing** `-p`, only when your contigs are made with paired-end reads. You need to provide either the reads-to-contigs alignment file, using `-aln <file name>`, or paired-end reads using `-pe <interleaved file>` or `-pe <separated r1 and r2 files>`
-- **read cloud linkage** `-lr` 
+- **read cloud linkage** `-lr`, you need to provide reads and alignment files too. Your read file, in fasta or fastq format, should have headers that include a barcode. The barcode should be the last field of the header, delimited by a white space, e.g.: in `ST-J12345:123:ABCDEFGHI:1:1234:12345:67890 ABCDEF`, `ABCDEF` is the barcode. Read more about the linked-read sequencing [here](https://pubmed.ncbi.nlm.nih.gov/26829319/).
+
+
+**To set the reads:**
+
+You can set paired-end reads using `-pe` or single-end reads using `-se`. You can give `-pe` 1 file to be interpreted as interleaved, or 2 files to be interpreted as R1 and R2 files. `-pe` and `-se` are not exclusive of each other, and can be used at the same time.
 
 Use `python netbin/src/network_builder/infomap_binning.py -h` for more command-line options.
 
 
-**Output:**
-- bins/
+## Output
+- `bins/`
 which contains the binning result. (Currently only the contigs that are below the length threshold are written out there, as unbinned.short.fa)
 - `infomap.ftree` 
 Flow tree format, as explained by the Infomap devs,
