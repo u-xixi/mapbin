@@ -401,7 +401,7 @@ def make_infomap_assembly(args, im_network: Infomap,
     # return "\n".join(obuffer)
 
 
-def generate_ctg_lookup(contig_fa_lookup: Dict[str, str], min_ctg_len: int, unbinned_short_file:str):
+def generate_ctg_lookup(contig_fa_lookup: Dict[str, str], min_ctg_len: int):
     # alternative func for generate ctg lookup
     # function: generate ctg lookup dict
     #           and initialize im by initializing the network and adding nodes
@@ -424,7 +424,7 @@ def generate_ctg_lookup(contig_fa_lookup: Dict[str, str], min_ctg_len: int, unbi
         ilen = len(iseq)
 
         if ilen < min_ctg_len:
-            unbinned_short.append("\n".join([">" + iheader, iseq]))
+            unbinned_short.append(iheader)
         else:
             formatted_id = format_ctg_idf(iheader)
             cur_nbcontig = NbContig("", ilen, i)  # changed node_id to int
@@ -435,11 +435,9 @@ def generate_ctg_lookup(contig_fa_lookup: Dict[str, str], min_ctg_len: int, unbi
 
         i += 1
     print("[=== Parsing contigs ===] {} contigs with minimum length {} for binning".format(len(ctg_lookup), min_ctg_len))
-    print("[=== Parsing contigs ===] writing out contigs below minimum length to file: {}" .format(unbinned_short_file))
-    with open(unbinned_short_file, 'w') as fw:
-        fw.write("\n".join(unbinned_short) + "\n")
 
-    return ctg_lookup, im_network
+
+    return ctg_lookup, im_network, unbinned_short
 
 
 

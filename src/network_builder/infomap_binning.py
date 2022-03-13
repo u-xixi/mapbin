@@ -2,6 +2,7 @@ from arg_handler import *
 from network_utils import *
 from parsers import *
 import argparse
+from map2bin import *
 
 
 def binning(args):
@@ -11,7 +12,7 @@ def binning(args):
     # step 1: build a network
     # ctg_lookup, unbinned, im_network = generate_ctg_lookup(args.ctg_fa, args.min_ctg_len)
     contig_fa_lookup = parse_contig_fa(args.ctg_fa)
-    ctg_lookup, im_network = generate_ctg_lookup(contig_fa_lookup, args.min_ctg_len, args.unbinned_short_file)
+    ctg_lookup, im_network, unbinned_short = generate_ctg_lookup(contig_fa_lookup, args.min_ctg_len)
 
 
     # step 2: add links
@@ -19,17 +20,19 @@ def binning(args):
         make_infomap_binned(args, im_network=im_network,
                             layer_idx=1, ctg_lookup=ctg_lookup)
 
+    if args.is_assembly:
+        make_infomap_assembly(args, im_network,
+        layer_idx=2, all_contigs=set(contig_fa_lookup.keys()), ctg_lookup=ctg_lookup)
+
     if args.is_pair:
         make_infomap_pairing(args, im_network=im_network,
-                             layer_idx=2, ctg_lookup=ctg_lookup)
+                             layer_idx=3, ctg_lookup=ctg_lookup)
 
     if args.is_lr:
         make_infomap_linked(args, im_network=im_network,
-                            layer_idx=3, ctg_lookup=ctg_lookup)
+                            layer_idx=4, ctg_lookup=ctg_lookup)
 
-    if args.is_assembly:
-        make_infomap_assembly(args, im_network,
-        layer_idx=4, all_contigs=set(contig_fa_lookup.keys()), ctg_lookup=ctg_lookup)
+
 
     # set_im_node_names(ctg_lookup, im_network)
     im_network.run(ftree=True)
@@ -37,6 +40,9 @@ def binning(args):
     im_network.write_flow_tree(args.im_ftree)
     im_network.write_clu(args.im_clu)
 
+    write_unbinned_short(unbinned_short, contig_fa_lookup, args.unbinned_short_file)
+
+    args.net2bin(im_network, contig_fa_lookup, args.out_dir)
     # step 3: run infomap
     # step 4: turn modules into bins
 
@@ -50,6 +56,11 @@ def command_line_parser():
                         metavar="out-dir", help="output directory")
     parser.add_argument("-mcl", "--min-ctg-len", type=int, default=2500, dest="min_ctg_len",
                         metavar="contig-min-length", help="minimum contig size. must be >= 1000")
+    # output function
+    parser.add_argument("-f", "--overlap-type", dest="overlap_type", choices=['overlap', 'nodispute', 'basic'],
+                        default='overlap',
+                        metavar="contig-overlap", help="whether allowing contig overlap in bins or not.")
+
 
     #  integration of binning result. activated by flag -b
     parser.add_argument("-b", "--bins", dest="bin_dir", nargs="+",

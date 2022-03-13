@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import sys
 from shutil import rmtree
+from map2bin import *
 
 
 def arg_handler(args):
@@ -15,6 +16,7 @@ def arg_handler(args):
     # handling output dir
 
     ah_output(args)
+    ah_out_func(args)
     # ah_aln(args)
     ah_read(args)
     args.is_binned, args.is_compo = [False] * 2
@@ -75,6 +77,16 @@ def ah_output(args):
     args.im_pajek = args.out_dir + "multilayer.net"
     args.im_ftree = args.out_dir + "infomap.ftree"
     args.im_clu = args.out_dir + "infomap.clu"
+
+
+def ah_out_func(args):
+    overlap_type = args.overlap_type
+    if overlap_type == 'overlap':
+        args.net2bin = net2bin_overlap
+    elif overlap_type == 'nodispute':
+        args.net2bin = net2bin_nodispute
+    elif overlap_type == 'basic':
+        args.net2bin = net2bin_basic
 
 
 # def ah_aln(args):

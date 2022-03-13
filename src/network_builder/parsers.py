@@ -22,7 +22,7 @@ def parse_contig_fa(contig_fasta:str) -> Dict[str, str]:
     contig_fa_lookup = {}
 
     def conclude_record(header, seq):
-        contig_fa_lookup[header] = "\n".join(seq)
+        contig_fa_lookup[header] = "".join(seq)
 
     with open(contig_fasta, 'r') as f:
         cur_header = ""
