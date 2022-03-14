@@ -82,11 +82,11 @@ def ah_output(args):
 def ah_out_func(args):
     overlap_type = args.overlap_type
     if overlap_type == 'overlap':
-        args.net2bin = net2bin_overlap
+        args.map2bin = map2bin_overlap
     elif overlap_type == 'nodispute':
-        args.net2bin = net2bin_nodispute
+        args.map2bin = map2bin_nodispute
     elif overlap_type == 'basic':
-        args.net2bin = net2bin_basic
+        args.map2bin = map2bin_basic
 
 
 # def ah_aln(args):

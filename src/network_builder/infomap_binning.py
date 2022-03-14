@@ -42,7 +42,7 @@ def binning(args):
 
     write_unbinned_short(unbinned_short, contig_fa_lookup, args.unbinned_short_file)
 
-    args.net2bin(im_network, contig_fa_lookup, args.out_dir)
+    args.map2bin(im_network, contig_fa_lookup, args.out_dir)
     # step 3: run infomap
     # step 4: turn modules into bins
 

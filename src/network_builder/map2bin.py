@@ -22,6 +22,19 @@ def _write_bin_dict(bin_dict:Dict[int, List[str]], out_dir: str):
             fw_handle.write("\n".join(icontigs) + "\n")
 
 
+def _pick_overlapped_helper(dict_: Dict[str, List[int]]):
+    """
+    if a disputed node's states got assigned to the same module
+    move it from disputed to undisputed
+    :param dict_: disputed dict
+    :yield:
+    """
+    topop = {}
+    for k, v in dict_.items():
+        if len(set(v)) == 1:
+            topop[k] = v[0]
+    return topop
+
 def _write_infomap_unbinned_contigs(binned_nodes: Set[str], contig_fa_lookup: Dict[str, str], out_dir:str) -> None:
     unbinned_content = []
     remains = set(contig_fa_lookup.keys()).difference(binned_nodes)
@@ -29,7 +42,7 @@ def _write_infomap_unbinned_contigs(binned_nodes: Set[str], contig_fa_lookup: Di
     for i in remains:
         unbinned_content.append(fasta_concat(header=i, seq=contig_fa_lookup[i]))
     unbinned_fp = out_dir + "bins/unbinned.fa"
-    print("[=== Contig binning ===] {} contigs not assigned".format(len(unbinned_content)))
+    print("[=== Contig binning ===] {} contigs not binned by Infomap".format(len(unbinned_content)))
 
     if unbinned_content:
         print("[=== Contig binning ===] writing unbinned contigs to {}".format("unbinned.fa"))
@@ -51,7 +64,7 @@ def write_unbinned_short(unbinned: List[str], contig_fa_lookup: Dict[str, str], 
         fw.write("\n".join(unbinned_short_content) + "\n")
 
 
-def net2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str) -> None:
+def map2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str) -> None:
     """
     write out bins. bins might share contigs.
     :param contig_fa_lookup: contig_fa_lookup but with the contigs whose length < min_ctg_len have been popped out
@@ -62,7 +75,7 @@ def net2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_di
     unbinned.fa <unbinned by infomap algo>
     disputed.tsv
     """
-    def _pick_the_overlapped() -> Tuple[Dict[str, List[int]], Dict[str, List[int]]]:
+    def _pick_overlapped() -> Tuple[Dict[str, List[int]], Dict[str, List[int]]]:
         """
         all nodes are in nodes2modules, with all their modules
         if they are assigned to more than 1 module,
@@ -82,7 +95,10 @@ def net2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_di
 
             else:
                 nodes2modules[i_name] = [i_module_id]
-        
+
+        for k, v in _pick_overlapped_helper(disputed).items():
+            disputed.pop(k)
+            nodes2modules[k] = [v]
 
         print("[=== Contig binning ===] {} contigs in more than 1 bins (disputed contigs)".format(len(disputed)))
         return nodes2modules, disputed
@@ -104,7 +120,7 @@ def net2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_di
     print("[=== Contig binning ===] No. states: {}".format(im_network.num_nodes))
     print("[=== Contig binning ===] No. physical nodes: {}".format(im_network.num_physical_nodes))
 
-    all_nodes_, disputed_ = _pick_the_overlapped()
+    all_nodes_, disputed_ = _pick_overlapped()
     fa_content = {}  # module_id: fasta
 
     for header, bins in all_nodes_.items():
@@ -120,8 +136,8 @@ def net2bin_overlap(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_di
     _write_disputed(disputed_)
 
 
-def net2bin_nodispute(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str) -> None:
-    def _pick_the_overlapped() -> Tuple[Dict[str, int], Dict[str, List[int]]]:
+def map2bin_nodispute(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str) -> None:
+    def _pick_overlapped() -> Tuple[Dict[str, int], Dict[str, List[int]]]:
         """
         Nodes are in nodes2modules, if they are assigned to just 1 module.
         otherwise they will be in disputed.
@@ -138,6 +154,10 @@ def net2bin_nodispute(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_
                 disputed[i_name].append(i_module_id)
             else:
                 nodes2modules[i_name] = i_module_id
+        for k, v in _pick_overlapped_helper(disputed).items():
+            disputed.pop(k)
+            nodes2modules[k] = v
+
         print("[=== Contig binning ===] {} contigs end up in more than 1 bins (disputed contigs)".format(len(disputed)))
         return nodes2modules, disputed
 
@@ -166,8 +186,7 @@ def net2bin_nodispute(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_
     print("[=== Contig binning ===] No. states: {}".format(im_network.num_nodes))
     print("[=== Contig binning ===] No. physical nodes: {}".format(im_network.num_physical_nodes))
 
-    undisputed_, disputed_ = _pick_the_overlapped()
-    print(disputed_)
+    undisputed_, disputed_ = _pick_overlapped()
     undisputed_content = {}
     for i_header, i_bin in undisputed_.items():
         i_seq = contig_fa_lookup[i_header]
@@ -178,13 +197,13 @@ def net2bin_nodispute(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_
 
 
     _write_bin_dict(undisputed_content, out_dir)
-    unbinned_infomap = set(contig_fa_lookup.keys()).difference(undisputed_.keys()).difference(disputed_.keys())
-    _write_infomap_unbinned_contigs(unbinned_infomap, contig_fa_lookup, out_dir)
+    binned_infomap = set(undisputed_.keys()).union(disputed_.keys())
+    _write_infomap_unbinned_contigs(binned_infomap, contig_fa_lookup, out_dir)
     _write_disputed(disputed_)
 
 
-def net2bin_basic(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str):
-    def _pick_the_overlapped() -> Tuple[Dict[str, Tuple[int, float]], Dict[str, List[int]]]:
+def map2bin_basic(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:str):
+    def _pick_overlapped() -> Tuple[Dict[str, Tuple[int, float]], Dict[str, List[int]]]:
         """
         all nodes are in nodes2modules.
         if they are assigned to more than 1 module,
@@ -208,6 +227,8 @@ def net2bin_basic(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:
 
             else:
                 nodes2modules[i_name] = (i_module_id, i_flow)
+        for k, _ in _pick_overlapped_helper(disputed).items():
+            disputed.pop(k)
 
         print("[=== Contig binning ===] {} contigs in more than 1 bins (disputed contigs)".format(len(disputed)))
         return nodes2modules, disputed
@@ -226,7 +247,7 @@ def net2bin_basic(im_network:Infomap, contig_fa_lookup: Dict[str, str], out_dir:
     print("[=== Contig binning ===] No. states: {}".format(im_network.num_nodes))
     print("[=== Contig binning ===] No. physical nodes: {}".format(im_network.num_physical_nodes))
 
-    all_nodes_, disputed_ = _pick_the_overlapped()
+    all_nodes_, disputed_ = _pick_overlapped()
     fa_content = {}
     for i_header, (i_bin, _) in all_nodes_.items():
         i_seq = contig_fa_lookup[i_header]
