@@ -60,6 +60,8 @@ def command_line_parser():
     parser.add_argument("-f", "--overlap-type", dest="overlap_type", choices=['overlap', 'nodispute', 'basic'],
                         default='overlap',
                         metavar="contig-overlap", help="whether allowing contig overlap in bins or not.")
+    parser.add_argument("-si", "--seed-infomap", default=1, type=int, dest="im_seed",
+                        metavar="random-seed-infomap", help="set seed for running infomap. default: 1")
 
 
     #  integration of binning result. activated by flag -b
@@ -70,6 +72,8 @@ def command_line_parser():
                         metavar="binned-fasta-extension", help="binned fasta file extensions. default: fa")
     parser.add_argument("-csl", "--clique-size-limit", default=25, dest="s", type=int,
                         metavar="clique-size-limit", help="allowed biggest clique for binning network. default: 25")
+    parser.add_argument("-sb", "--seed-binning", default=12345, type=int, dest="random_seed",
+                        metavar="random-seed-binning", help="set seed for binning layer network building. default: 12345")
 
     #  using assembly graph.
     parser.add_argument("-a", "--assembly", action="store_true", dest="is_assembly",

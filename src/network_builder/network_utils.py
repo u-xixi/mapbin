@@ -40,12 +40,8 @@ format_ctg_idf = lambda x: x.strip().split(" ")[0]
 #     output: im_network
 
 
-def make_complete_graph(nodes: List[NbContig], im_network, layer_idx) -> str:
-    if len(nodes) == 1:
-        return ""
-
-    else:
-        obuffer = []
+def make_complete_graph(nodes: List[NbContig], im_network, layer_idx) -> None:
+    if len(nodes) > 1:
         link_count = 0
         for i in range(len(nodes)):
             for j in range(i+1, len(nodes)):
@@ -54,16 +50,13 @@ def make_complete_graph(nodes: List[NbContig], im_network, layer_idx) -> str:
                 im_network.add_multilayer_intra_link(layer_idx, inode.num_id,
                                                      jnode.num_id, weight=1)
                 link_count += 1
-                obuffer.append("{0} {1} {2} {3}".format(layer_idx, inode.num_id, jnode.num_id, 1))
         print("[:::Message:::] made complete graph with {} edges".format(link_count))
-
-        return "\n".join(obuffer)
 
 
 def make_infomap_binned(args, im_network: Infomap, layer_idx,
-                        ctg_lookup: Dict[str, NbContig]) -> str:
+                        ctg_lookup: Dict[str, NbContig]) -> None:
 
-    def _subbin_handler(subbin: List[NbContig], obuffer:List[str]) -> NbContig:
+    def _subbin_handler(subbin: List[NbContig]) -> NbContig:
         """
         decide which contig is the center (median) that connects to all the rest of contigs
         which contig is the representative (biggest) that serves as the node connected to the other subbins.
@@ -94,11 +87,10 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
 
         for i_ctg in circle_ctg:
             im_network.add_multilayer_intra_link(layer_idx, i_ctg.num_id, center_ctg.num_id, weight=1)
-            # to be solved: weight between nodes
-            obuffer.append("{0} {1} {2} {3}".format(layer_idx, i_ctg.num_id, center_ctg.num_id, 1))
+
         return rep_ctg
 
-    def make_network_bin_fa(bin_fa: str, s: int) -> str:
+    def make_network_bin_fa(bin_fa: str, s: int) -> int:
         """
 
         :param bin_fa: fasta file represent one bin
@@ -108,20 +100,18 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
         # step 1: decide the bin-dividing plan
         # step 2: fill in the edges
 
-
         # step 1
         bin_headers = set(parse_contig_fa(bin_fa).keys())
         bin_ctg = [ctg_lookup[i] for i in bin_headers if i in ctg_lookup]
-        # return make_complete_graph(nodes=bin_ctg, im_network=im_network, layer_idx=layer_idx)
 
         if len(bin_ctg) <= s:
             print("[:::Message:::] make complete graph for {}".format(bin_fa))
-            return make_complete_graph(nodes=bin_ctg, im_network=im_network, layer_idx=layer_idx)
+            make_complete_graph(nodes=bin_ctg, im_network=im_network, layer_idx=layer_idx)
 
         else:
             print("[:::Message:::] make density-reduced graph for {}".format(bin_fa))
-            bin_obuffer = []
-            seed(12345)
+            # seed(12345)
+            seed(args.random_seed)
             shuffle(bin_ctg)
 
             N = len(bin_ctg)
@@ -129,27 +119,20 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
             Lmax = Lmin + 1
             all_L = [Lmax] * (N%s)
             all_L.extend([Lmin]*(s - N%s))
-            # print("[:::Dev Message:::]network_utils, L133, no. nodes: {}; sizes: {}".format(N, all_L))
-            # print("[:::Dev Message:::]network_utils, L133, no. nodes: {}\n {}".format(bin_fa, N))
 
             # step 2
             l0 = 0
             reps = []
             for l1 in all_L:
                 i_subbin = bin_ctg[l0:l0+l1]
-                irep = _subbin_handler(i_subbin, obuffer)
+                irep = _subbin_handler(i_subbin)
                 reps.append(irep)
                 l0 += l1
 
-            buffer_text_p2 = make_complete_graph(reps, im_network=im_network,
+            make_complete_graph(reps, im_network=im_network,
                                 layer_idx=layer_idx)
-            bin_obuffer.append(buffer_text_p2)
+        return len(bin_ctg)
 
-            return "\n".join(bin_obuffer)
-
-
-# def make_infomap_binned(args, im_network:Infomap, layer_idx, ctg_lookup, out_fhandle: TextIO)-> None:
-    obuffer = []
     for i_bin_dir in args.bin_dir:
         bin_fa_files = glob.glob(i_bin_dir + "*." + args.bin_suffix)
         print("[=== Binning layer ===] Parsing binning result directory \"{}\".".format(i_bin_dir))
@@ -159,14 +142,14 @@ def make_infomap_binned(args, im_network: Infomap, layer_idx,
 
         time_begin = time.time()
 
+        n_binned_ctg = 0
         for i_fa in bin_fa_files:
-            i_buffer_text = make_network_bin_fa(bin_fa=i_fa, s=args.s)
-            obuffer.append(i_buffer_text)
+            n_binned_ctg += make_network_bin_fa(bin_fa=i_fa, s=args.s)
 
         # update_dict_val(im_edges_content, i_edges)
         time_finish = time.time()
+        print("[=== Binning layer ===] Built network for {} contigs in provided binning.".format(n_binned_ctg))
         print("[=== Binning layer ===] Processing binning result took {:.1f} secs".format(time_finish - time_begin))
-        return "\n".join(obuffer)
 
 
 def make_infomap_pairing(args, im_network: Infomap, layer_idx:int, ctg_lookup:Dict[str, NbContig]):

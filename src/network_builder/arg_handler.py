@@ -126,8 +126,8 @@ def ah_read(args) -> None:
 
 def ah_bin_dir(args):
     if args.bin_dir:
-        print("[::Message::] Found binning result: {}".format(args.bin_dir))
-        print("[::Message::] \"Binned\" mode on")
+        print("[:::Message:::] Found binning result: {}".format(args.bin_dir))
+        print("[:::Message:::] \"Binned\" mode on")
         args.is_binned = True
         formatted_bin_dir = []
         for i_bin_dir in args.bin_dir:
@@ -141,13 +141,13 @@ def ah_bin_dir(args):
 def ah_lr_reads(args):
     # this can only be executed after ah_reads(args)
     if args.is_lr:
-        print("[::Message::] Found read cloud file(s): {}".format(args.bin_dir))
-        print("[::Message::] \"Read cloud\" mode on")
+        print("[:::Message:::] Found read cloud file(s): {}".format(args.bin_dir))
+        print("[:::Message:::] \"Read cloud\" mode on")
         if not args.pe_reads and not args.se_reads:
             args.is_lr = False
             print("[::Warning::] Read file not provided. Disabling read cloud")
         if not args.aln_file and not args.aln_r1:
-            print("[::Calling BWA::]")
+            print("[:::Calling BWA:::]")
         # stub
 
 
@@ -175,11 +175,11 @@ def ah_assembly(args) -> None:
     if args.is_assembly:
         if args.assembler == "spades":
             if args.ctg_paths:
-                print("[::Message::] \"Assembly\" mode on.")
-                print("[::Message::] Assembler: Spades. contig paths file: {}".format(args.ctg_paths))
+                print("[:::Message:::] \"Assembly\" mode on.")
+                print("[:::Message:::] Assembler: Spades. contig paths file: {}".format(args.ctg_paths))
             else:
                 args.is_assembly = False
-                print("[::Message::] Cannot find contig paths file. Disabling assembly mode...")
+                print("[:::Message:::] Cannot find contig paths file. Disabling assembly mode...")
 
 def bwa_caller():
     # stub
