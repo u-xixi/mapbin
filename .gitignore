@@ -2,6 +2,9 @@
 .idea/
 testing/
 __pycache__/
+paper/*
+stub/*
+trashh/*
 src/__pycache__/
 src/file_io.py
 src/trashh/
